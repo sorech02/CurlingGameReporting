@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <title>Curling Schedule</title>
+  <style>
+    :root {
+      --ice: #e8f4ff;
+      --blue: #005bbb;
+      --red: #d62828;
+      --yellow: #f7c948;
+      --dark: #333;
+    }
+
+    button:hover {
+      background: linear-gradient(90deg, #f7c948, #d62828);
+      background-size: 200% 100%;
+      animation: sweep 0.4s linear forwards;
+    }
+
+    @keyframes sweep {
+      from { background-position: 200% 0; }
+      to { background-position: 0 0; }
+    }
+
+    .site-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 30px 20px;
+      position: relative;
+    }
+
+    /* Left text */
+    .site-header h1 {
+      margin: 0;
+      font-size: 2.4rem;
+      text-align: left;
+    }
+
+    /* --- Sheet container --- */
+    .header-ice-zone {
+      position: relative;
+      width: 800px;
+      height: 120px;
+      background: #ffffff;
+      overflow: hidden;
+      border:2px solid #0F0F0F;
+    }
+
+    /* --- Houses --- */
+    .house {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 120px;
+      height: 120px;
+    }
+
+    .left-house {
+      left: 0.3%;
+    }
+
+    .right-house {
+      right: 0.3%;
+    }
+
+    /* --- Rings --- */
+    .house .ring {
+      position: absolute;
+      border-radius: 50%;
+    }
+
+    .blue-ring {
+      width: 120px;
+      height: 120px;
+      background: #005bbb;
+      opacity: 0.35;
+    }
+
+    .white-ring {
+      width: 90px;
+      height: 90px;
+      background: #ffffff;
+      top: 15px;
+      left: 15px;
+      opacity: 0.8;
+    }
+
+    .red-ring {
+      width: 60px;
+      height: 60px;
+      background: #d62828;
+      top: 30px;
+      left: 30px;
+      opacity: 0.5;
+    }
+
+    .yellow-ring {
+      width: 20px;
+      height: 20px;
+      background: #f7c948;
+      top: 50px;
+      left: 50px;
+      opacity: 0.9;
+    }
+
+    /* --- Correct sheet markings --- */
+
+    /* Center line: horizontal across entire sheet */
+    .sheet-center-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: black;
+      opacity: 0.45;
+      transform: translateY(-50%);
+      z-index: 1;
+    }
+
+    .hog-line-left {
+      position: absolute;
+      top: 0;
+      left: 30%;
+      width: 3px;
+      height: 100%;
+      background: #d62828;
+      opacity: 0.5;
+      z-index: 2;
+    }
+
+    .hog-line-right {
+      position: absolute;
+      top: 0;
+      left: 70%;
+      width: 3px;
+      height: 100%;
+      background: #d62828;
+      opacity: 0.5;
+      z-index: 2;
+    }
+
+    /* Tee line: vertical through center of each house */
+    .tee-line {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 2px;
+      height: 100%;
+      background: blue;
+      opacity: 0.3;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+
+    /* --- Stone animation (restricted between houses) --- */
+    .stone {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      left: calc(1% + 90px); /* start between houses */
+      font-size: 36px;
+      animation: stoneSlide 6s linear infinite,
+             stoneSpinY 0.8s linear infinite;
+      z-index: 3;
+    }
+
+    @keyframes stoneSlide {
+      0%   { left: calc(1% + 45px); }
+      50%  { left: calc(99% - 90px); }
+      100% { left: calc(1% + 45px); }
+    }
+
+    @keyframes stoneSpinY {
+      0%   { transform: translateY(-50%) rotateY(0deg); }
+      50% { transform: translateY(-50%) rotateY(180deg)}
+      100% { transform: translateY(-50%) rotateY(0deg); }
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    /* GRID LAYOUT */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stream-btn {
+      background: var(--yellow);
+      color: var(--dark);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-weight: bold;
+      text-decoration: none;
+      transition: background 0.2s ease;
+    }
+
+    .stream-btn:hover {
+      background: var(--red);
+      color: white;
+    }
+
+
+    /* CARD STYLES */
+    .card {
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      font-size: 0.95rem;
+      background: rgba(255,255,255,0.6);
+      backdrop-filter: blur(6px);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .current-game {
+      border-left: 5px solid #43a047;
+    }
+
+    .next-game {
+      border-left: 5px solid #1e88e5;
+    }
+
+    .past-game {
+      border-left: 5px solid #9e9e9e;
+      opacity: 0.85;
+    }
+
+    .game-time {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .event {
+      font-style: bold;
+      color: #0F0F0F;
+      margin-bottom: 4px;
+    }
+
+    .stream a {
+      color: #1e88e5;
+      text-decoration: none;
+    }
+
+    .result {
+      margin-top: 6px;
+      font-weight: bold;
+    }
+
+    .empty {
+      color: #777;
+      font-style: italic;
+    }
+
+    .event-expander {
+      margin: 16px 0;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.35);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.4);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      overflow: hidden;
+      transition: box-shadow 0.3s ease;
+    }
+
+    .event-expander[open] {
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+
+    .event-expander summary {
+      cursor: pointer;
+      padding: 12px 16px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      background: #e8f2ff;
+      border-radius: 10px;
+    }
+
+    .event-expander summary:hover {
+      background: #d9ebff;
+    }
+
+    .event-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 20px 0;
+    }
+
+    .event-table th, .event-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .event-table th {
+      background: #f0f7ff;
+      font-weight: bold;
+    }
+
+    .win {
+      color: #0a6;
+      font-weight: bold;
+    }
+
+    .loss {
+      color: #c00;
+      font-weight: bold;
+    }
+
+    #viewToggle {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    #viewToggle button {
+      padding: 10px 18px;
+      border-radius: 20px;
+      border: none;
+      background: #e8f3ff;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s ease;
+    }
+
+    #viewToggle button.active {
+      background: #1565c0;
+      color: white;
+    }
+
+    #curlingMap {
+      margin-bottom: 12px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    }
+
+    #mapSection {
+      display: flex;
+      flex-direction: row;
+      gap: 16px;
+    }
+
+    #mapResults {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <h1>Curling Games</h1>
+    <div class="header-ice-zone">
+
+      <!-- Full sheet center line (horizontal) -->
+      <div class="sheet-center-line"></div>
+
+      <div class="hog-line-left"></div>
+      <div class="hog-line-right"></div>
+
+      <!-- Left house -->
+      <div class="house left-house">
+        <div class="ring blue-ring"></div>
+        <div class="ring white-ring"></div>
+        <div class="ring red-ring"></div>
+        <div class="ring yellow-ring"></div>
+
+        <div class="tee-line"></div>
+      </div>
+
+      <!-- Right house -->
+      <div class="house right-house">
+        <div class="ring blue-ring"></div>
+        <div class="ring white-ring"></div>
+        <div class="ring red-ring"></div>
+        <div class="ring yellow-ring"></div>
+
+        <div class="tee-line"></div>
+      </div>
+
+      <div class="stone">🥌</div>
+    </div>
+
+  </header>
+
+  <h2>Current Game</h2>
+  <div id="current-game" class="grid"></div>
+
+  <h2>Next Game</h2>
+  <div id="next-game" class="grid"></div>
+
+  <h2>Upcoming Games</h2>
+  <div id="upcoming-games" class="grid"></div>
+
+  <h2>Past Games</h2>
+  <div id="viewToggle">
+    <button id="mapViewBtn" class="active">Map View</button>
+    <button id="listViewBtn">List View</button>
+  </div>
+
+  <div id="mapView">
+    <p>Select a club to view past games</p>
+    <div id="mapSection">
+      <div id="curlingMap" style="height: 350px; width:50%; border-radius: 12px;"></div>
+      <div id="mapResults">
+        <div class="card">Select a curling club on the map to view past games at that location.</div>
+      </div>
+    </div>
+  </div>
+  <div id="past-games" style="display:none;"></div>
+
+  <script>
+    async function loadGamesFromCSV() {
+      var delimiter = ',';
+      const response = await fetch("games.csv");
+      const csvString = await response.text();
+      // Split the text into individual lines and remove empty rows
+      const lines = csvString.trim().split(/\r?\n/);
+      if (lines.length === 0) return [];
+
+      // Extract headers from the first line and trim whitespace
+      const headers = lines[0].split(delimiter).map(header => header.trim());
+
+      // Map the remaining lines into JavaScript objects
+      const jsonArray = lines.slice(1).map(line => {
+          const values = line.split(delimiter).map(value => value.trim());
+          const obj = {};
+          
+          headers.forEach((header, index) => {
+              // Assign values to matching headers, fallback to null if empty
+              obj[header] = values[index] !== undefined ? values[index] : null;
+          });
+          
+          return obj;
+      });
+
+      // Return the result as a JSON string (or return jsonArray directly)
+      return jsonArray;
+    }
+
+    async function loadClubPoints() {
+      const response = await fetch("clubs.csv");
+      const text = await response.text();
+
+      const rows = text.trim().split("\n");
+      const headers = rows.shift().split(",");
+
+      const clubs = rows.map(row => {
+        const [club, lat, lon] = row.split(",");
+        return { club, lat: parseFloat(lat), lon: parseFloat(lon) };
+      });
+
+      return clubs;
+    }
+
+    loadGamesFromCSV().then(games => {
+
+      const now = new Date();
+      const THREE_HOURS = 2.5 * 60 * 60 * 1000;
+
+      games.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      let currentGame = null;
+      const futureGames = [];
+      const pastGames = [];
+
+      games.forEach(game => {
+        const start = new Date(game.date);
+        const diff = now - start;
+
+        if (diff >= 0 && diff <= THREE_HOURS) {
+          currentGame = game;
+        } else if (start > now) {
+          futureGames.push(game);
+        } else {
+          pastGames.push(game);
+        }
+      });
+      
+      pastGames.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      const nextGame = futureGames[0];
+      const upcomingGames = futureGames.slice(1);
+      
+
+      function renderGame(game, type = "") {
+        const date = new Date(game.date);
+        return `
+          <div class="card ${type}">
+            <div class="game-time">
+              ${date.toLocaleDateString()}<br>
+              ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
+            <div class="event">🏆 ${game.event}</div>
+            <div>📍 ${game.location}</div>
+            <div>📄 ${game.sheet}</div>
+
+            ${type === "next-game" || type === "current-game" ? `
+              <div class="stream">
+                ${game.stream
+                  ? `📺 <a href="${game.stream}" target="_blank">Stream</a>`
+                  : "📺 No stream"}
+              </div>
+            ` : ""}
+
+            ${type === "past-game" ? `
+              <div class="result">
+                🏁 ${game.result || "No result"}
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }
+
+      function groupByEvent(rows) {
+        const events = {};
+
+        rows.forEach(row => {
+          const eventName = row.event;
+
+          if (!events[eventName]) {
+            events[eventName] = [];
+          }
+
+          events[eventName].push(row);
+        });
+
+        return events;
+      };
+
+      function sortEventsByLatestDate(eventsByName) {
+        return Object.entries(eventsByName)
+          .map(([eventName, games]) => {
+            const latestDate = new Date(
+              Math.max(...games.map(g => new Date(g.date)))
+            );
+            return { eventName, games, latestDate };
+          })
+          .sort((a, b) => b.latestDate - a.latestDate); // newest → oldest
+      }
+
+      function buildPastGames(sortedEvents) {
+        const container = document.getElementById("past-games");
+        container.innerHTML = "";
+
+        sortedEvents.forEach(({ eventName, games }) => {
+          const expander = document.createElement("details");
+          expander.className = "event-expander";
+
+          const summary = document.createElement("summary");
+          summary.textContent = eventName;
+          expander.appendChild(summary);
+
+          const table = document.createElement("table");
+          table.className = "event-table";
+
+          table.innerHTML = `
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Location</th>
+                <th>Sheet</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          `;
+
+          const tbody = table.querySelector("tbody");
+
+          games.forEach(game => {
+            const row = document.createElement("tr");
+
+            row.innerHTML = `
+              <td>${game.date}</td>
+              <td>${game.location}</td>
+              <td>${game.sheet}</td>
+              <td class="${game.result.toLowerCase()}">${game.result || ""}</td>
+            `;
+
+            tbody.appendChild(row);
+          });
+
+          expander.appendChild(table);
+          container.appendChild(expander);
+        });
+      }
+
+      document.getElementById("current-game").innerHTML =
+        currentGame
+          ? renderGame(currentGame, "current-game")
+          : `<div class="empty">No game in progress.</div>`;
+
+      document.getElementById("next-game").innerHTML =
+        nextGame
+          ? renderGame(nextGame, "next-game")
+          : `<div class="empty">No upcoming games.</div>`;
+
+      document.getElementById("upcoming-games").innerHTML =
+        upcomingGames.length
+          ? upcomingGames.map(g => renderGame(g)).join("")
+          : `<div class="empty">No additional upcoming games.</div>`;
+
+      var pastGamesByEvent = groupByEvent(pastGames);
+      var sortPastGamesByEvent = sortEventsByLatestDate(pastGamesByEvent);
+      buildPastGames(sortPastGamesByEvent);
+
+      document.getElementById("listViewBtn").onclick = () => {
+        document.getElementById("mapView").style.display = "none";
+        document.getElementById("past-games").style.display = "block";
+        listViewBtn.classList.add("active");
+        mapViewBtn.classList.remove("active");
+      };
+
+      document.getElementById("mapViewBtn").onclick = () => {
+        document.getElementById("past-games").style.display = "none";
+        document.getElementById("mapView").style.display = "block";
+        mapViewBtn.classList.add("active");
+        listViewBtn.classList.remove("active");
+
+        if (!map) initMap();
+      };
+
+      let map;
+
+      function initMap() {
+        map = L.map('curlingMap').setView([44.0731, -89.4012], 6); // Wisconsin center
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 18,
+        }).addTo(map);
+
+        const curlingStoneIcon = L.icon({
+          iconUrl: 'MeganCurlingPoint.svg',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+          popupAnchor: [0, -16]
+        });
+
+        function showGamesForClub(clubName) {
+          const resultsDiv = document.getElementById("mapResults");
+          resultsDiv.innerHTML = ""; // clear previous results
+
+          const matchingGames = pastGames.filter(g => g.location === clubName);
+
+          if (matchingGames.length === 0) {
+            resultsDiv.innerHTML = `<div class="card">No games found for ${clubName}</div>`;
+            return;
+          }
+
+          matchingGames.forEach(game => {
+            console.log("game: ", game);
+            resultsDiv.innerHTML += renderGame(game, "past-game");
+          });
+        }
+
+        // Find the club with the most recent past game
+        const mostRecentGame = pastGames.reduce((latest, game) => {
+          return !latest || new Date(game.date) > new Date(latest.date)
+            ? game
+            : latest;
+        }, null);
+
+        const defaultClub = mostRecentGame?.location;
+
+        async function loadCSV(url) {
+          const response = await fetch(url);
+          const text = await response.text();
+          const rows = text.trim().split("\n");
+          const headers = rows.shift().split(",");
+
+          return rows.map(row => {
+            const values = row.split(",");
+            const obj = {};
+            headers.forEach((h, i) => obj[h] = values[i]);
+            return obj;
+          });
+        }
+
+        async function initMapClubs() {
+          // Load both CSVs
+          const clubs = await loadCSV("clubs.csv");
+
+          const mentioned = new Set(
+            pastGames.map(g => g.location)
+          );
+
+          // Filter clubs to only those mentioned
+          const filtered = clubs.filter(c => mentioned.has(c.club));
+
+          filtered.forEach(club => {
+            const marker = L.marker([club.lat, club.lon], { icon: curlingStoneIcon })
+              .addTo(map)
+              .bindPopup(`<strong>${club.club}</strong>`)
+              .on("click", () => {
+                showGamesForClub(club.club);
+              });
+
+            // Automatically select the club with the most recent game
+            if (club.club === defaultClub) {
+              marker.openPopup();
+              showGamesForClub(club.club);
+            }
+          });
+        }
+        initMapClubs();
+      }
+      initMap();
+    });
+  </script>
+
+</body>
+</html>
